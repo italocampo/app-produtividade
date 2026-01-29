@@ -2,8 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Estilos Globais */
 body {
   background-color: #0f172a;
   color: white;
   font-family: sans-serif;
+  /* Previne o "scroll elástico" feio no iOS */
+  overscroll-behavior-y: none; 
+}
+
+/* --- SUPORTE PARA IPHONE (SAFE AREA) --- */
+/* Isso cria um "colchão" automático para a barra preta do iPhone */
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Se o navegador não for de celular, dá um espacinho padrão de 20px */
+  @supports not (padding-bottom: env(safe-area-inset-bottom)) {
+    .pb-safe {
+      padding-bottom: 1.25rem; /* 20px */
+    }
+  }
 }
