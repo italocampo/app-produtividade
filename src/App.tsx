@@ -79,7 +79,7 @@ function App() {
       
       // Atualiza com o ID real do banco de dados
       setRotinaBase(prev => prev.map(h => h.id === tempId ? habitoReal : h));
-    } catch (error) {
+    } catch {
       alert("Erro ao salvar. Tente novamente.");
     }
   }
