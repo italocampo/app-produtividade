@@ -1,190 +1,382 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Plus, Trash2, CheckCircle, Circle, RefreshCw, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+import { 
+  Plus, Trash2, ArrowRight, Activity, Book, Briefcase, Heart, Zap, 
+  CheckSquare, Square, LayoutDashboard, Smile, 
+  Brain, ChevronLeft, BarChart3, Settings, Droplets 
+} from 'lucide-react';
+import type { HabitoBase, PlanoSemanal, DiaSemana } from './types';
 
-// ✅ SUA API (Mantenha o link que já estava funcionando)
-const API_URL = import.meta.env.VITE_API_URL || 'https://bd-italocampos-backend-produtividade.t8sftf.easypanel.host';
+// --- TIPOS INTERNOS ---
+type TelaAtual = 'ROTINA' | 'PLANEJAMENTO' | 'HOJE' | 'ESTATISTICAS';
 
-interface Meta {
-  id: number;
-  titulo: string;
-  categoria: string;
-  concluida: boolean;
-}
+// --- DADOS INICIAIS (Para não começar vazio) ---
+const HABITOS_INICIAIS: HabitoBase[] = [
+  { id: '1', nome: 'Treino / Academia', categoria: 'Saúde' },
+  { id: '2', nome: 'Beber 3L de Água', categoria: 'Saúde' },
+  { id: '3', nome: 'Leitura (30min)', categoria: 'Estudo' },
+  { id: '4', nome: 'Trabalho Focado', categoria: 'Trabalho' },
+  { id: '5', nome: 'Meditação / Oração', categoria: 'Espírito' },
+];
 
 function App() {
-  const [metas, setMetas] = useState<Meta[]>([]);
-  const [novoTitulo, setNovoTitulo] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState('');
+  // --- FUNÇÕES AUXILIARES DE DATA ---
+  const getDiaReal = (): DiaSemana => {
+    const map: DiaSemana[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+    return map[new Date().getDay()];
+  };
+
+  // --- ESTADOS COM PERSISTÊNCIA (LocalStorage) ---
   
-  // 3. ESTADO DA DATA (Começa sempre HOJE no horário local)
-  const [dataAtual, setDataAtual] = useState(() => {
-    const hoje = new Date();
-    hoje.setHours(hoje.getHours() - 3); // Ajuste fuso Brasil (se necessário) ou usar toLocaleDateString
-    return hoje.toISOString().split('T')[0];
+  // 1. Tela Atual
+  const [tela, setTela] = useState<TelaAtual>(() => {
+    const salvo = localStorage.getItem('app_tela');
+    return (salvo as TelaAtual) || 'ROTINA';
   });
 
-  // Carrega sempre que a data mudar
-  useEffect(() => {
-    carregarMetas();
-  }, [dataAtual]);
+  // 2. Rotina Base
+  const [rotinaBase, setRotinaBase] = useState<HabitoBase[]>(() => {
+    const salvo = localStorage.getItem('app_rotina');
+    return salvo ? JSON.parse(salvo) : HABITOS_INICIAIS;
+  });
+  
+  // 3. Planejamento Semanal
+  const [planoSemanal, setPlanoSemanal] = useState<PlanoSemanal>(() => {
+    const salvo = localStorage.getItem('app_plano');
+    return salvo ? JSON.parse(salvo) : { seg: [], ter: [], qua: [], qui: [], sex: [], sab: [], dom: [] };
+  });
 
-  async function carregarMetas() {
-    setLoading(true);
-    try {
-      // Busca as metas da data selecionada na tela
-      const res = await axios.get(`${API_URL}/metas?data=${dataAtual}`);
-      setMetas(res.data);
-      setErro('');
-    } catch (error) {
-      console.error("Erro", error);
-      setErro('Erro de conexão.');
-    } finally {
-      setLoading(false);
-    }
-  }
+  // 4. Concluídas Hoje
+  const [concluidasHoje, setConcluidasHoje] = useState<string[]>(() => {
+    const salvo = localStorage.getItem('app_concluidas');
+    return salvo ? JSON.parse(salvo) : [];
+  });
 
-  async function adicionarMeta(e: React.FormEvent) {
+  // --- EFEITOS (Salvar automaticamente) ---
+  useEffect(() => localStorage.setItem('app_tela', tela), [tela]);
+  useEffect(() => localStorage.setItem('app_rotina', JSON.stringify(rotinaBase)), [rotinaBase]);
+  useEffect(() => localStorage.setItem('app_plano', JSON.stringify(planoSemanal)), [planoSemanal]);
+  useEffect(() => localStorage.setItem('app_concluidas', JSON.stringify(concluidasHoje)), [concluidasHoje]);
+
+  // --- LÓGICA DE ROTINA ---
+  const [novoHabito, setNovoHabito] = useState('');
+  const [categoria, setCategoria] = useState<HabitoBase['categoria']>('Saúde');
+
+  function adicionarHabito(e: React.FormEvent) {
     e.preventDefault();
-    if (!novoTitulo.trim()) return;
+    if (!novoHabito.trim()) return;
+    const novo: HabitoBase = { id: crypto.randomUUID(), nome: novoHabito, categoria };
+    setRotinaBase([...rotinaBase, novo]);
+    setNovoHabito('');
+  }
 
-    const tempId = Date.now();
-    const novaMetaTemp = { id: tempId, titulo: novoTitulo, categoria: 'Rotina', concluida: false };
-    
-    // Adiciona na lista visualmente
-    setMetas([...metas, novaMetaTemp]);
-    setNovoTitulo('');
-
-    try {
-      const res = await axios.post(`${API_URL}/metas`, {
-        titulo: novoTitulo,
-        categoria: 'Rotina',
-        data: dataAtual // Salva na data que está aparecendo na tela!
-      });
-      setMetas(prev => prev.map(m => m.id === tempId ? res.data : m));
-    } catch (error) {
-      alert('Erro ao salvar.');
-      carregarMetas();
+  function removerHabito(id: string) {
+    if(confirm('Tem certeza que deseja excluir este hábito permanentemente?')) {
+      setRotinaBase(rotinaBase.filter(h => h.id !== id));
     }
   }
 
-  async function toggleMeta(id: number, estadoAtual: boolean) {
-    // Atualiza localmente
-    const novasMetas = metas.map(m => m.id === id ? { ...m, concluida: !estadoAtual } : m);
-    setMetas(novasMetas);
-    
-    // Atualiza no banco
-    await axios.patch(`${API_URL}/metas/${id}/toggle`, { concluida: !estadoAtual });
+  // --- LÓGICA DE PLANEJAMENTO ---
+  const [diaSelecionado, setDiaSelecionado] = useState<DiaSemana>(getDiaReal());
+
+  const diasDisplay: Record<DiaSemana, string> = {
+    seg: 'Segunda', ter: 'Terça', qua: 'Quarta', qui: 'Quinta', 
+    sex: 'Sexta', sab: 'Sábado', dom: 'Domingo'
+  };
+
+  function toggleHabitoNoDia(habitoId: string) {
+    const habitosDoDia = planoSemanal[diaSelecionado];
+    const jaTem = habitosDoDia.includes(habitoId);
+    const novos = jaTem ? habitosDoDia.filter(id => id !== habitoId) : [...habitosDoDia, habitoId];
+    setPlanoSemanal({ ...planoSemanal, [diaSelecionado]: novos });
   }
 
-  async function deletarMeta(id: number) {
-    if (!confirm('Deletar meta?')) return;
-    setMetas(metas.filter(m => m.id !== id));
-    await axios.delete(`${API_URL}/metas/${id}`);
+  function replicarParaSemana() {
+    if (!confirm('Copiar a rotina de Segunda para toda a semana?')) return;
+    const modelo = planoSemanal['seg'];
+    setPlanoSemanal({
+      seg: modelo, ter: modelo, qua: modelo, qui: modelo, sex: modelo, sab: modelo, dom: modelo
+    });
   }
 
-  // FUNÇÃO PARA MUDAR OS DIAS
-  function mudarDia(dias: number) {
-    const novaData = new Date(dataAtual);
-    novaData.setDate(novaData.getDate() + dias + 1); // +1 corrige bug de timezone do JS ao converter string
-    setDataAtual(novaData.toISOString().split('T')[0]);
+  // --- LÓGICA DO DASHBOARD (HOJE) ---
+  const diaRealCodigo = getDiaReal();
+  
+  const tarefasDeHoje = rotinaBase.filter(habito => 
+    planoSemanal[diaRealCodigo]?.includes(habito.id)
+  );
+
+  function toggleConclusaoHoje(id: string) {
+    if (concluidasHoje.includes(id)) {
+      setConcluidasHoje(concluidasHoje.filter(c => c !== id));
+    } else {
+      setConcluidasHoje([...concluidasHoje, id]);
+    }
   }
 
-  // Formata a data para exibir bonito (Ex: "19/01 - Segunda")
-  function formatarDataExibicao(isoDate: string) {
-    const dataObj = new Date(isoDate + 'T12:00:00'); // Força meio-dia para não voltar dia com fuso
-    const hoje = new Date().toISOString().split('T')[0];
-    
-    if (isoDate === hoje) return "Hoje";
-    
-    return dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + 
-           ` • ${dataObj.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}`;
-  }
+  const progresso = tarefasDeHoje.length > 0 
+    ? Math.round((concluidasHoje.length / tarefasDeHoje.length) * 100) 
+    : 0;
 
-  // 1. LÓGICA DE ORDENAÇÃO (Pendentes em cima, Concluídas em baixo)
-  const metasOrdenadas = [...metas].sort((a, b) => {
-    return Number(a.concluida) - Number(b.concluida);
-  });
-
-  // Cálculos de Progresso
-  const total = metas.length;
-  const feitas = metas.filter(m => m.concluida).length;
-  const progresso = total === 0 ? 0 : Math.round((feitas / total) * 100);
+  // Ícones
+  const getIconeCategoria = (cat: string) => {
+    switch(cat) {
+      case 'Saúde': return <Heart size={16} className="text-red-400" />;
+      case 'Trabalho': return <Briefcase size={16} className="text-blue-400" />;
+      case 'Estudo': return <Book size={16} className="text-yellow-400" />;
+      case 'Espírito': return <Zap size={16} className="text-purple-400" />;
+      case 'Cuidados': return <Droplets size={16} className="text-cyan-400" />;
+      case 'Mente': return <Brain size={16} className="text-teal-400" />;
+      default: return <Activity size={16} className="text-slate-400" />;
+    }
+  };
 
   return (
-    <div className="min-h-screen pb-24 max-w-md mx-auto bg-slate-900 text-white font-sans">
+    <div className="min-h-screen bg-slate-950 text-slate-100 font-sans p-4 pb-24">
       
-      {/* Header com Navegação de Datas */}
-      <header className="p-6 pt-10 bg-slate-800 rounded-b-3xl shadow-lg border-b border-slate-700">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              Minha Rotina 🚀
-            </h1>
-          </div>
-          <button onClick={carregarMetas} className="p-2 bg-slate-700 rounded-full hover:bg-slate-600 transition">
-            <RefreshCw size={18} className={loading ? "animate-spin text-green-400" : "text-white"} />
-          </button>
-        </div>
-
-        {/* CONTROLE DE DATA */}
-        <div className="flex items-center justify-between bg-slate-900/50 p-2 rounded-xl border border-slate-700 mb-4">
-          <button onClick={() => mudarDia(-1)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition">
-            <ChevronLeft size={24} />
-          </button>
-          
-          <div className="flex items-center gap-2 font-semibold text-lg">
-            <Calendar size={18} className="text-green-500"/>
-            <span className="capitalize">{formatarDataExibicao(dataAtual)}</span>
-          </div>
-
-          <button onClick={() => mudarDia(1)} className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition">
-            <ChevronRight size={24} />
-          </button>
-        </div>
-        
-        {/* Barra de Progresso */}
-        <div className="relative h-4 bg-slate-950 rounded-full overflow-hidden border border-slate-700/50">
-          <div 
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-green-600 to-emerald-400 transition-all duration-500" 
-            style={{ width: `${progresso}%` }}
-          />
-        </div>
-        <p className="text-right text-xs font-bold mt-2 text-green-400">{progresso}% CONCLUÍDO</p>
-      </header>
-
-      {/* Lista de Tarefas (Usa a lista ORDENADA) */}
-      <main className="p-4 space-y-3 mt-2">
-        {erro && <div className="p-3 bg-red-900/30 border border-red-800 rounded text-red-200 text-sm text-center">{erro}</div>}
-        
-        {loading && metas.length === 0 ? (
-          <div className="text-center py-10 animate-pulse text-slate-500">Carregando...</div>
-        ) : metasOrdenadas.map(meta => (
-          <div key={meta.id} className={`flex items-center justify-between p-4 rounded-xl border transition-all duration-300 ${meta.concluida ? 'bg-slate-900/30 border-slate-800 opacity-50 order-last' : 'bg-slate-800 border-slate-700 order-first'}`}>
-            <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => toggleMeta(meta.id, meta.concluida)}>
-              {meta.concluida ? <CheckCircle className="text-green-500 shrink-0" /> : <Circle className="text-slate-500 shrink-0" />}
-              <span className={meta.concluida ? 'line-through text-slate-500 transition-all' : 'text-slate-100 transition-all'}>{meta.titulo}</span>
+      {/* --- TELA 1: CADASTRO DE ROTINA --- */}
+      {tela === 'ROTINA' && (
+        <div className="max-w-md mx-auto space-y-6 animate-in fade-in">
+          <header className="pt-8 flex justify-between items-start">
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-1">Rotina Base 🏗️</h1>
+              <p className="text-slate-400 text-sm">Biblioteca de hábitos.</p>
             </div>
-            <button onClick={() => deletarMeta(meta.id)} className="text-slate-600 hover:text-red-400 p-2"><Trash2 size={18} /></button>
-          </div>
-        ))}
-        
-        {!loading && metas.length === 0 && (
-          <p className="text-center text-slate-600 mt-10 text-sm">Nenhuma tarefa para este dia.</p>
-        )}
-      </main>
+            <button onClick={() => setTela('HOJE')} className="p-2 bg-slate-800 rounded-lg text-slate-400">
+               <ArrowRight />
+            </button>
+          </header>
 
-      <form onSubmit={adicionarMeta} className="fixed bottom-0 left-0 right-0 p-4 bg-slate-900/90 backdrop-blur border-t border-slate-800 flex gap-2 max-w-md mx-auto">
-        <input 
-          type="text" 
-          value={novoTitulo}
-          onChange={e => setNovoTitulo(e.target.value)}
-          placeholder={`Meta para ${formatarDataExibicao(dataAtual)}...`} 
-          className="flex-1 bg-slate-800 text-white rounded-lg px-4 py-3 outline-none border border-slate-700 focus:border-green-500"
-        />
-        <button type="submit" disabled={!novoTitulo} className="bg-green-600 text-white p-3 rounded-lg"><Plus /></button>
-      </form>
+          <form onSubmit={adicionarHabito} className="bg-slate-900 p-4 rounded-xl border border-slate-800 space-y-3">
+            <input 
+              type="text" value={novoHabito} onChange={e => setNovoHabito(e.target.value)}
+              placeholder="Novo hábito..." 
+              className="w-full bg-slate-800 text-white rounded-lg px-4 py-3 outline-none border border-slate-700 focus:border-blue-500"
+            />
+            <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+              {['Saúde', 'Trabalho', 'Estudo', 'Espírito', 'Cuidados', 'Mente', 'Outros'].map(cat => (
+                <button key={cat} type="button" onClick={() => setCategoria(cat as HabitoBase['categoria'])}
+                  className={`px-3 py-1 rounded-full text-xs font-bold border whitespace-nowrap ${
+                    categoria === cat ? 'bg-blue-600 border-blue-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+            <button type="submit" className="w-full bg-slate-700 hover:bg-slate-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2">
+              <Plus size={20} /> Criar Novo
+            </button>
+          </form>
+
+          <div className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-500 uppercase ml-1">Meus Hábitos Salvos</h3>
+            {rotinaBase.map(h => (
+              <div key={h.id} className="flex justify-between items-center bg-slate-900 p-3 rounded-xl border border-slate-800">
+                <div className="flex items-center gap-3">
+                   <div className="p-2 bg-slate-800 rounded-lg">{getIconeCategoria(h.categoria)}</div>
+                   <span className="font-medium text-slate-200">{h.nome}</span>
+                </div>
+                <button onClick={() => removerHabito(h.id)} className="text-slate-600 hover:text-red-400 p-2"><Trash2 size={18} /></button>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={() => setTela('PLANEJAMENTO')} className="fixed bottom-6 right-6 left-6 bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2">
+            Ir para Planejamento <ArrowRight size={20} />
+          </button>
+        </div>
+      )}
+
+      {/* --- TELA 2: PLANEJAMENTO --- */}
+      {tela === 'PLANEJAMENTO' && (
+        <div className="max-w-md mx-auto space-y-6 animate-in slide-in-from-right">
+          <header className="pt-4 flex justify-between items-center">
+             <div><h1 className="text-xl font-bold text-white">Planejamento 📅</h1><p className="text-slate-400 text-xs">Monte sua semana.</p></div>
+             <button onClick={() => setTela('HOJE')} className="text-xs text-slate-500 underline">Voltar p/ Hoje</button>
+          </header>
+
+          <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+            {(Object.keys(diasDisplay) as DiaSemana[]).map(dia => (
+              <button key={dia} onClick={() => setDiaSelecionado(dia)}
+                className={`px-4 py-2 rounded-lg font-bold text-sm whitespace-nowrap transition-all ${
+                  diaSelecionado === dia ? 'bg-green-600 text-white shadow-lg' : 'bg-slate-800 text-slate-400 border border-slate-700'
+                }`}
+              >
+                {diasDisplay[dia]}
+              </button>
+            ))}
+          </div>
+
+          <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-800 min-h-[400px]">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-bold text-slate-200">Para {diasDisplay[diaSelecionado]}:</h2>
+              {diaSelecionado === 'seg' && <button onClick={replicarParaSemana} className="text-xs text-blue-400 underline">Copiar Seg p/ todos</button>}
+            </div>
+            
+            <div className="space-y-2">
+               <p className="text-xs text-slate-500 mb-2">Toque para adicionar/remover deste dia:</p>
+              {rotinaBase.map(h => {
+                const selecionado = planoSemanal[diaSelecionado].includes(h.id);
+                return (
+                  <div key={h.id} onClick={() => toggleHabitoNoDia(h.id)}
+                    className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${
+                      selecionado ? 'bg-green-900/20 border-green-800' : 'bg-slate-800 border-slate-700 opacity-60'
+                    }`}
+                  >
+                    {selecionado ? <CheckSquare className="text-green-500" /> : <Square className="text-slate-500" />}
+                    <span className={selecionado ? 'text-white' : 'text-slate-400'}>{h.nome}</span>
+                    <div className="ml-auto opacity-50">{getIconeCategoria(h.categoria)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <button onClick={() => setTela('HOJE')} className="fixed bottom-6 right-6 left-6 bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg flex items-center justify-center gap-2">
+            <LayoutDashboard size={20} /> Salvar e Ver Hoje
+          </button>
+        </div>
+      )}
+
+      {/* --- TELA 3: DASHBOARD HOJE (PRINCIPAL) --- */}
+      {tela === 'HOJE' && (
+        <div className="max-w-md mx-auto space-y-6 animate-in zoom-in duration-300">
+          
+          {/* Header do Dia */}
+          <header className="pt-6 flex justify-between items-start">
+            <div>
+              <p className="text-green-400 font-bold text-xs uppercase tracking-wider mb-1">Visão do Dia</p>
+              <h1 className="text-3xl font-bold text-white capitalize">{diasDisplay[diaRealCodigo]}</h1>
+            </div>
+            <div className="flex gap-2">
+               <button onClick={() => setTela('ESTATISTICAS')} className="p-3 bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                <BarChart3 size={20} />
+              </button>
+              <button onClick={() => setTela('PLANEJAMENTO')} className="p-3 bg-slate-800 rounded-xl text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                <Settings size={20} />
+              </button>
+            </div>
+          </header>
+
+          {/* Barra de Progresso */}
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-5 rounded-3xl border border-slate-700 shadow-xl">
+            <div className="flex justify-between text-sm font-bold mb-3">
+              <span className="text-slate-300 flex items-center gap-2"><Activity size={16}/> Performance</span>
+              <span className="text-green-400">{progresso}%</span>
+            </div>
+            <div className="h-3 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+              <div 
+                className={`h-full transition-all duration-700 ease-out ${progresso === 100 ? 'bg-green-400 shadow-[0_0_10px_rgba(74,222,128,0.5)]' : 'bg-green-600'}`}
+                style={{ width: `${progresso}%` }}
+              />
+            </div>
+            {progresso === 100 && <p className="text-center text-xs text-green-400 mt-3 font-bold animate-pulse">META BATIDA! 🔥 PARABÉNS!</p>}
+          </div>
+
+          {/* Lista de Execução */}
+          <div className="space-y-3 pb-20">
+            <h2 className="text-slate-500 text-xs font-bold uppercase tracking-wider pl-1 mt-4">Sua Missão</h2>
+            
+            {tarefasDeHoje.length === 0 ? (
+              <div className="text-center py-10 opacity-50 border-2 border-dashed border-slate-800 rounded-2xl">
+                <Smile size={48} className="mx-auto mb-3 text-slate-600" />
+                <p>Dia livre!</p>
+                <button onClick={() => setTela('PLANEJAMENTO')} className="text-blue-400 text-sm mt-2 underline">Configurar Planejamento</button>
+              </div>
+            ) : (
+              tarefasDeHoje.map(h => {
+                const feita = concluidasHoje.includes(h.id);
+                return (
+                  <div key={h.id} onClick={() => toggleConclusaoHoje(h.id)}
+                    className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all duration-300 ${
+                      feita 
+                        ? 'bg-slate-900/40 border-slate-800 opacity-40 translate-y-2' 
+                        : 'bg-slate-800 border-slate-700 shadow-md hover:bg-slate-750 hover:-translate-y-1'
+                    }`}
+                  >
+                    <div className={`p-3 rounded-xl transition-colors ${
+                      feita ? 'bg-green-500/10 text-green-500' : 'bg-slate-900 text-slate-500 shadow-inner'
+                    }`}>
+                      {feita ? <CheckSquare size={20} /> : <Square size={20} />}
+                    </div>
+                    
+                    <div className="flex-1">
+                      <p className={`font-medium text-lg transition-all ${feita ? 'line-through text-slate-500' : 'text-white'}`}>
+                        {h.nome}
+                      </p>
+                      <div className="flex items-center gap-1 mt-1">
+                        {getIconeCategoria(h.categoria)}
+                        <span className="text-xs text-slate-400">{h.categoria}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* --- TELA 4: ESTATÍSTICAS (NOVA!) --- */}
+      {tela === 'ESTATISTICAS' && (
+        <div className="max-w-md mx-auto space-y-6 animate-in slide-in-from-right">
+           <header className="pt-6 flex items-center gap-4">
+            <button onClick={() => setTela('HOJE')} className="p-2 bg-slate-800 rounded-full text-white hover:bg-slate-700">
+               <ChevronLeft />
+            </button>
+            <h1 className="text-xl font-bold text-white">Estatísticas 📊</h1>
+          </header>
+
+          {/* Gráfico de Carga Semanal */}
+          <div className="bg-slate-900 p-6 rounded-3xl border border-slate-800">
+             <h3 className="text-sm font-bold text-slate-400 mb-4 uppercase">Carga de Tarefas da Semana</h3>
+             <div className="flex items-end justify-between h-40 gap-2">
+                {(Object.keys(diasDisplay) as DiaSemana[]).map(dia => {
+                   const qtd = planoSemanal[dia].length;
+                   const altura = qtd > 0 ? (qtd / 10) * 100 : 5; // Altura relativa (max 10 tarefas)
+                   const isHoje = dia === diaRealCodigo;
+                   
+                   return (
+                     <div key={dia} className="flex flex-col items-center gap-2 flex-1">
+                        <div className="w-full relative group">
+                           <div 
+                              className={`w-full rounded-t-lg transition-all ${isHoje ? 'bg-green-500' : 'bg-slate-700'}`} 
+                              style={{ height: `${Math.min(altura * 1.5, 100)}px` }}
+                           ></div>
+                           {/* Tooltip com número */}
+                           <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs font-bold text-white opacity-0 group-hover:opacity-100 transition">
+                              {qtd}
+                           </div>
+                        </div>
+                        <span className={`text-xs font-bold uppercase ${isHoje ? 'text-green-500' : 'text-slate-500'}`}>
+                           {dia.substring(0, 1)}
+                        </span>
+                     </div>
+                   )
+                })}
+             </div>
+          </div>
+
+          {/* Resumo */}
+          <div className="grid grid-cols-2 gap-4">
+             <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+                <p className="text-slate-500 text-xs font-bold uppercase">Total Hoje</p>
+                <p className="text-3xl font-bold text-white mt-1">{tarefasDeHoje.length}</p>
+             </div>
+             <div className="bg-slate-900 p-4 rounded-2xl border border-slate-800">
+                <p className="text-slate-500 text-xs font-bold uppercase">Concluídas</p>
+                <p className="text-3xl font-bold text-green-400 mt-1">{concluidasHoje.length}</p>
+             </div>
+          </div>
+
+          <div className="p-4 bg-blue-900/20 border border-blue-900 rounded-xl text-center">
+             <p className="text-blue-300 text-sm">
+                Em breve: Histórico completo de conclusões conectado ao Banco de Dados! 🚀
+             </p>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
